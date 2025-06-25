@@ -15,8 +15,8 @@ CHANNEL_USERNAME = "@potapova_psy"
 
 # ID чата и сообщений с практиками
 SOURCE_CHAT_ID = 416561840  # ID чата, где хранятся медиафайлы
-PRACTICE_MESSAGE_ID = 174    # ID голосового сообщения с практикой
-INSTRUCTION_MESSAGE_ID = 176 # ID видео с инструкцией
+PRACTICE_MESSAGE_ID = 192    # ID голосового сообщения с практикой
+INSTRUCTION_MESSAGE_ID = 194 # ID видео с инструкцией
 
 async def check_subscription(user_id: int, app) -> bool:
     """Проверка подписки на канал"""
