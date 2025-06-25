@@ -44,7 +44,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # Пересылаем голосовое с практикой
             try:
-                await context.bot.forward_message(
+                await context.bot.copy_message(
                     chat_id=query.message.chat_id,
                     from_chat_id=SOURCE_CHAT_ID,
                     message_id=PRACTICE_MESSAGE_ID
@@ -69,7 +69,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "show_instruction":
         # Пересылаем видео с инструкцией
         try:
-            await context.bot.forward_message(
+            await context.bot.copy_message(
                 chat_id=query.message.chat_id,
                 from_chat_id=SOURCE_CHAT_ID,
                 message_id=INSTRUCTION_MESSAGE_ID
