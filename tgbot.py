@@ -9,7 +9,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = "7942293176:AAGBdoQdO-EFBkI-dAjU5n8q0yvaZeOZe3g"
+TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
 
 # ID чата и сообщений с практиками
