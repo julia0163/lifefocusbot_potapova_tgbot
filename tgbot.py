@@ -1,6 +1,6 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import os
 
 # Настройка логгирования
@@ -118,9 +118,6 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(CallbackQueryHandler(button_handler))
-    
-    # Только для отладки - можно отключить в продакшене
-    application.add_handler(MessageHandler(filters.ALL, handle_any_message))
     
     # Запускаем бота с webhook
     logger.info("Запускаем бота с webhook...")
