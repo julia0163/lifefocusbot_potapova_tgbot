@@ -3,7 +3,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import os
 from flask import Flask
-import threading
+from telegram.ext import ApplicationBuilder
 
 # Настройка логгирования
 logging.basicConfig(
@@ -16,13 +16,17 @@ TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 
-app = ApplicationBuilder().token(TOKEN).build()
-
-
 # ID чата и сообщений с практиками
-SOURCE_CHAT_ID = 416561840  # ID чата, где хранятся медиафайлы
-PRACTICE_MESSAGE_ID = 192    # ID голосового сообщения с практикой
-INSTRUCTION_MESSAGE_ID = 194 # ID видео с инструкцией
+SOURCE_CHAT_ID = 416561840
+PRACTICE_MESSAGE_ID = 192
+INSTRUCTION_MESSAGE_ID = 194
+
+# Создаем Flask приложение для health checks
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def index():
+    return "Bot is running"
 
 async def check_subscription(user_id: int, app) -> bool:
     try:
@@ -67,6 +71,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="HTML"
             )
+
     elif query.data == "show_instruction":
         try:
             await context.bot.copy_message(
@@ -88,7 +93,8 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.delete_message(chat_id, update.message.message_id - i)
     except Exception as e:
         logger.error(f"Ошибка удаления: {e}")
-    await update.message.reply_text("🗑 Последние за 48 часов сообщения бота удалены.")
+    
+    await update.message.reply_text("🗑️ Последние за 48 часов сообщения бота удалены.")
     await start(update, context)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -99,6 +105,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Гневом и раздражением
 • Тревогой и беспокойством
 • Апатией и усталостью
+
 <b>Сейчас доступна:</b>
 🧠 Практика <b>«Вторичные выгоды»</b> - помогает разорвать связь между скрытыми преимуществами и вашим негативным состоянием.
 """
@@ -123,31 +130,32 @@ async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
 
-# Запускаем Flask сервер для Render
-flask_app = Flask(__name__)
-
-@flask_app.route('/')
-def index():
-    return "Bot is running"
-
 def run_flask():
-    flask_app.run(host="0.0.0.0", port=3000)
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
 
-def run_bot():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("clear", clear_history))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.ALL, handle_any_message))
-    logger.info("Бот успешно запущен!")
-    app.run_polling()
-
-if __name__ == "__main__":
-      app.run_webhook(
+def main():
+    # Создаем и настраиваем бота
+    application = ApplicationBuilder().token(TOKEN).build()
+    
+    # Регистрируем обработчики
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("clear", clear_history))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.ALL, handle_any_message))
+    
+    # Запускаем Flask в отдельном потоке
+    import threading
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    # Запускаем бота с webhook
+    logger.info("Запускаем бота с webhook...")
+    application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 5000)),
         url_path=TOKEN,
-        webhook_url=WEBHOOK_URL + TOKEN
+        webhook_url=WEBHOOK_URL + TOKEN,
+        secret_token='WEBHOOK_SECRET'  # Опционально для безопасности
     )
-    threading.Thread(target=run_flask).start()
-    run_bot()
+
+if __name__ == "__main__":
+    main()
