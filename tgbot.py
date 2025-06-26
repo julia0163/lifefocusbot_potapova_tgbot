@@ -15,11 +15,8 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("TOKEN")
 PORT = int(os.getenv("PORT", 10000))
 
-# Инициализация Flask
-flask_app = Flask(__name__)
-
-# Глобальная переменная для приложения Telegram
-application = None
+app = Flask(__name__)
+bot_app = None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("✅ Проверить", callback_data="test")]]
@@ -33,36 +30,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await query.edit_message_text("✅ Всё работает корректно!")
 
-@flask_app.route(f'/{TOKEN}', methods=['POST'])
+@app.route(f'/webhook/{TOKEN}', methods=['POST'])
 async def webhook():
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.update_queue.put(update)
-    return "OK", 200
+    try:
+        json_data = await request.get_json()
+        update = Update.de_json(json_data, bot_app.bot)
+        await bot_app.process_update(update)
+        return "", 200
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return "", 500
 
-async def main():
-    global application
+@app.route('/health')
+def health():
+    return {"status": "OK", "bot_initialized": bot_app is not None}, 200
+
+async def setup_bot():
+    global bot_app
+    bot_app = ApplicationBuilder().token(TOKEN).build()
     
-    # Инициализация приложения Telegram
-    application = ApplicationBuilder().token(TOKEN).build()
+    bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(CallbackQueryHandler(button_handler))
     
-    # Регистрация обработчиков
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    
-    # Установка вебхука
-    webhook_url = f"https://lifefocusbot-potapova-tgbot.onrender.com/{TOKEN}"
-    await application.bot.set_webhook(webhook_url)
-    logger.info(f"Вебхук установлен: {webhook_url}")
-    
-    # Запуск Flask в асинхронном режиме
+    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook/{TOKEN}"
+    await bot_app.bot.set_webhook(webhook_url, drop_pending_updates=True)
+    logger.info(f"Webhook set to: {webhook_url}")
+
+def run():
     from hypercorn.asyncio import serve
     from hypercorn.config import Config
     
     config = Config()
     config.bind = [f"0.0.0.0:{PORT}"]
-    await serve(flask_app, config)
+    asyncio.run(serve(app, config))
 
 if __name__ == "__main__":
-    # Запуск асинхронного приложения
-    asyncio.run(main())
+    asyncio.run(setup_bot())
+    run()
