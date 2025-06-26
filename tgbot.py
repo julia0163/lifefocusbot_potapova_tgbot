@@ -2,7 +2,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import os
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import asyncio
 
 # Настройка логгирования
@@ -16,7 +16,7 @@ TOKEN = os.getenv("TOKEN")
 PORT = int(os.getenv("PORT", 10000))
 
 app = Flask(__name__)
-bot_app = None
+application = None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("✅ Проверить", callback_data="test")]]
@@ -33,30 +33,37 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @app.route(f'/webhook/{TOKEN}', methods=['POST'])
 async def webhook():
     try:
-        json_data = await request.get_json()
-        update = Update.de_json(json_data, bot_app.bot)
-        await bot_app.process_update(update)
-        return "", 200
+        json_data = request.get_json(force=True)
+        logger.info(f"Received update: {json_data}")
+        
+        update = Update.de_json(json_data, application.bot)
+        await application.process_update(update)
+        
+        return jsonify({"status": "ok"}), 200
     except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return "", 500
+        logger.error(f"Error processing update: {str(e)}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/health')
 def health():
-    return {"status": "OK", "bot_initialized": bot_app is not None}, 200
+    return jsonify({
+        "status": "OK",
+        "bot_initialized": application is not None,
+        "webhook_url": f"/webhook/{TOKEN}"
+    }), 200
 
-async def setup_bot():
-    global bot_app
-    bot_app = ApplicationBuilder().token(TOKEN).build()
+async def setup_application():
+    global application
+    application = ApplicationBuilder().token(TOKEN).build()
     
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_handler))
     
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook/{TOKEN}"
-    await bot_app.bot.set_webhook(webhook_url, drop_pending_updates=True)
-    logger.info(f"Webhook set to: {webhook_url}")
+    await application.bot.set_webhook(webhook_url, drop_pending_updates=True)
+    logger.info(f"Webhook configured: {webhook_url}")
 
-def run():
+def run_server():
     from hypercorn.asyncio import serve
     from hypercorn.config import Config
     
@@ -65,5 +72,7 @@ def run():
     asyncio.run(serve(app, config))
 
 if __name__ == "__main__":
-    asyncio.run(setup_bot())
-    run()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(setup_application())
+    run_server()
