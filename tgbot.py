@@ -14,38 +14,33 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("TOKEN")
 PORT = int(os.getenv("PORT", 10000))
 
-# Создаем Flask приложение для обработки вебхука
+# Создаем Flask приложение
 flask_app = Flask(__name__)
-application = None  # Будет инициализировано в main()
+
+# Глобальная переменная для хранения application
+telegram_app = None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start"""
-    keyboard = [
-        [InlineKeyboardButton("✅ Проверить", callback_data="test")]
-    ]
+    keyboard = [[InlineKeyboardButton("✅ Проверить", callback_data="test")]]
     await update.message.reply_text(
         "🔄 Бот работает!",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик кнопок"""
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("✅ Всё работает корректно!")
 
 @flask_app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
-    """Эндпоинт для вебхука"""
     if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        application.update_queue.put(update)
+        update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+        telegram_app.update_queue.put_nowait(update)
     return "OK", 200
 
-def main():
-    global application
-    
-    # Инициализация бота
+async def setup_application():
+    """Асинхронная настройка приложения Telegram"""
     application = ApplicationBuilder().token(TOKEN).build()
     
     # Регистрация обработчиков
@@ -54,11 +49,19 @@ def main():
     
     # Установка вебхука
     webhook_url = f"https://lifefocusbot-potapova-tgbot.onrender.com/{TOKEN}"
-    application.bot.set_webhook(webhook_url)
-    logger.info(f"Устанавливаем вебхук: {webhook_url}")
+    await application.bot.set_webhook(webhook_url)
+    logger.info(f"Вебхук установлен: {webhook_url}")
     
-    # Запуск Flask
+    return application
+
+def run_flask():
     flask_app.run(host="0.0.0.0", port=PORT)
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    
+    # Создаем и настраиваем приложение Telegram
+    telegram_app = asyncio.get_event_loop().run_until_complete(setup_application())
+    
+    # Запускаем Flask в основном потоке
+    run_flask()
