@@ -15,8 +15,11 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("TOKEN")
 PORT = int(os.getenv("PORT", 10000))
 
+# Инициализация Flask
 flask_app = Flask(__name__)
-telegram_app = None
+
+# Глобальная переменная для приложения Telegram
+application = None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("✅ Проверить", callback_data="test")]]
@@ -31,36 +34,35 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("✅ Всё работает корректно!")
 
 @flask_app.route(f'/{TOKEN}', methods=['POST'])
-def webhook():
+async def webhook():
     if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-        telegram_app.update_queue.put_nowait(update)
-        logger.info(f"Received update: {update.update_id}")
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        await application.update_queue.put(update)
     return "OK", 200
 
-async def setup_application():
+async def main():
+    global application
+    
+    # Инициализация приложения Telegram
     application = ApplicationBuilder().token(TOKEN).build()
+    
+    # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     
+    # Установка вебхука
     webhook_url = f"https://lifefocusbot-potapova-tgbot.onrender.com/{TOKEN}"
     await application.bot.set_webhook(webhook_url)
-    logger.info(f"Webhook set: {webhook_url}")
-    return application
-
-async def run_bot():
-    while True:
-        try:
-            await telegram_app.run_polling()
-        except Exception as e:
-            logger.error(f"Bot error: {e}")
-            await asyncio.sleep(5)
-
-def run_flask():
-    from threading import Thread
-    Thread(target=lambda: asyncio.run(run_bot())).start()
-    flask_app.run(host="0.0.0.0", port=PORT)
+    logger.info(f"Вебхук установлен: {webhook_url}")
+    
+    # Запуск Flask в асинхронном режиме
+    from hypercorn.asyncio import serve
+    from hypercorn.config import Config
+    
+    config = Config()
+    config.bind = [f"0.0.0.0:{PORT}"]
+    await serve(flask_app, config)
 
 if __name__ == "__main__":
-    telegram_app = asyncio.get_event_loop().run_until_complete(setup_application())
-    run_flask()
+    # Запуск асинхронного приложения
+    asyncio.run(main())
