@@ -10,11 +10,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.getenv("TOKEN")
+# Конфигурация
+TOKEN = os.getenv("TELEGRAM_TOKEN")  # Изменил название переменной для Render
 CHANNEL_USERNAME = "@potapova_psy"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", 5000))  # Порт для Render
 
-# ID чата и сообщений с практиками
+# ID чата и сообщений
 SOURCE_CHAT_ID = 416561840
 PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
@@ -111,22 +112,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def main():
-    # Создаем и настраиваем бота
+    # Получаем URL сервиса на Render
+    service_url = os.getenv("RENDER_EXTERNAL_URL")  # Автоматически устанавливается Render
+    
+    if not service_url:
+        logger.error("Не удалось получить RENDER_EXTERNAL_URL")
+        return
+    
     application = ApplicationBuilder().token(TOKEN).build()
     
-    # Регистрируем обработчики
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    # Запускаем бота с webhook
     logger.info("Запускаем бота с webhook...")
     application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.getenv("PORT", 5000)),
+        port=PORT,
         url_path=TOKEN,
-        webhook_url=WEBHOOK_URL + TOKEN,
-        secret_token='WEBHOOK_SECRET'
+        webhook_url=f"{service_url}/{TOKEN}",
+        secret_token=os.getenv("WEBHOOK_SECRET", "SECRET_KEY")
     )
 
 if __name__ == "__main__":
