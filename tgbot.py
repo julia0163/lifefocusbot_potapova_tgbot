@@ -11,7 +11,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+TOKEN = os.getenv("TOKEN")
 PORT = int(os.getenv("PORT", 10000))
 
 # Создаем Flask приложение для обработки вебхука
