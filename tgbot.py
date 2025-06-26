@@ -16,14 +16,7 @@ PORT = int(os.getenv("PORT", 10000))
 
 # Создаем Flask приложение для обработки вебхука
 flask_app = Flask(__name__)
-
-@flask_app.route(f'/{TOKEN}', methods=['POST'])
-async def webhook():
-    """Эндпоинт для вебхука"""
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), bot)
-        await application.process_update(update)
-    return "OK", 200
+application = None  # Будет инициализировано в main()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
@@ -41,12 +34,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await query.edit_message_text("✅ Всё работает корректно!")
 
+@flask_app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    """Эндпоинт для вебхука"""
+    if request.method == "POST":
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        application.update_queue.put(update)
+    return "OK", 200
+
 def main():
-    global bot, application
+    global application
     
     # Инициализация бота
     application = ApplicationBuilder().token(TOKEN).build()
-    bot = application.bot
     
     # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
@@ -54,11 +54,11 @@ def main():
     
     # Установка вебхука
     webhook_url = f"https://lifefocusbot-potapova-tgbot.onrender.com/{TOKEN}"
+    application.bot.set_webhook(webhook_url)
     logger.info(f"Устанавливаем вебхук: {webhook_url}")
     
     # Запуск Flask
-    if __name__ == "__main__":
-        flask_app.run(host="0.0.0.0", port=PORT)
+    flask_app.run(host="0.0.0.0", port=PORT)
 
 if __name__ == "__main__":
     main()
