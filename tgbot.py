@@ -5,7 +5,7 @@ import os
 from flask import Flask, request, jsonify
 import asyncio
 
-# Настройка логгирования
+# Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -18,6 +18,7 @@ PORT = int(os.getenv("PORT", 10000))
 app = Flask(__name__)
 application = None
 
+# Хендлеры
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("✅ Проверить", callback_data="test")]]
     await update.message.reply_text(
@@ -30,15 +31,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await query.edit_message_text("✅ Всё работает корректно!")
 
+# Синхронный обработчик вебхука
 @app.route(f'/webhook/{TOKEN}', methods=['POST'])
-async def webhook():
+def webhook():
     try:
         json_data = request.get_json(force=True)
         logger.info(f"Received update: {json_data}")
-        
+
         update = Update.de_json(json_data, application.bot)
-        await application.process_update(update)
-        
+        asyncio.run(application.process_update(update))
+
         return jsonify({"status": "ok"}), 200
     except Exception as e:
         logger.error(f"Error processing update: {str(e)}", exc_info=True)
@@ -55,10 +57,10 @@ def health():
 async def setup_application():
     global application
     application = ApplicationBuilder().token(TOKEN).build()
-    
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
-    
+
     webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook/{TOKEN}"
     await application.bot.set_webhook(webhook_url, drop_pending_updates=True)
     logger.info(f"Webhook configured: {webhook_url}")
@@ -66,7 +68,7 @@ async def setup_application():
 def run_server():
     from hypercorn.asyncio import serve
     from hypercorn.config import Config
-    
+
     config = Config()
     config.bind = [f"0.0.0.0:{PORT}"]
     asyncio.run(serve(app, config))
@@ -76,3 +78,4 @@ if __name__ == "__main__":
     asyncio.set_event_loop(loop)
     loop.run_until_complete(setup_application())
     run_server()
+
