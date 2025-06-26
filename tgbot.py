@@ -2,6 +2,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import os
+from flask import Flask, request
 
 # Настройка логгирования
 logging.basicConfig(
@@ -10,92 +11,54 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Конфигурация
-TOKEN = os.getenv("TOKEN")
-CHANNEL_USERNAME = "@potapova_psy"
-PORT = int(os.getenv("PORT", 5000))
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+PORT = int(os.getenv("PORT", 10000))
 
-# ID чата и сообщений
-SOURCE_CHAT_ID = 416561840
-PRACTICE_MESSAGE_ID = 192
-INSTRUCTION_MESSAGE_ID = 194
+# Создаем Flask приложение для обработки вебхука
+flask_app = Flask(__name__)
 
-async def check_subscription(user_id: int, app) -> bool:
-    try:
-        member = await app.bot.get_chat_member(CHANNEL_USERNAME, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except Exception as e:
-        logger.error(f"Ошибка проверки подписки: {e}")
-        return False
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "check_sub":
-        if await check_subscription(query.from_user.id, context.application):
-            await query.message.reply_text("✅ <b>Подписка подтверждена</b>", parse_mode="HTML")
-            try:
-                await context.bot.copy_message(
-                    chat_id=query.message.chat_id,
-                    from_chat_id=SOURCE_CHAT_ID,
-                    message_id=PRACTICE_MESSAGE_ID
-                )
-            except Exception as e:
-                logger.error(f"Ошибка: {e}")
-                await query.message.reply_text("❌ Ошибка загрузки", parse_mode="HTML")
-        else:
-            keyboard = [
-                [InlineKeyboardButton("📢 Подписаться", url="https://t.me/potapova_psy")],
-                [InlineKeyboardButton("✅ Я подписался", callback_data="check_sub")]
-            ]
-            await query.message.reply_text(
-                "❌ <b>Подписка не найдена</b>",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode="HTML"
-            )
-
-    elif query.data == "show_instruction":
-        try:
-            await context.bot.copy_message(
-                chat_id=query.message.chat_id,
-                from_chat_id=SOURCE_CHAT_ID,
-                message_id=INSTRUCTION_MESSAGE_ID
-            )
-        except Exception as e:
-            logger.error(f"Ошибка: {e}")
-            await query.message.reply_text("❌ Ошибка загрузки", parse_mode="HTML")
+@flask_app.route(f'/{TOKEN}', methods=['POST'])
+async def webhook():
+    """Эндпоинт для вебхука"""
+    if request.method == "POST":
+        update = Update.de_json(request.get_json(force=True), bot)
+        await application.process_update(update)
+    return "OK", 200
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = """🌟 <b>Добро пожаловать!</b>"""
+    """Обработчик команды /start"""
     keyboard = [
-        [InlineKeyboardButton("✅ Проверить подписку", callback_data="check_sub")],
-        [InlineKeyboardButton("📖 Инструкция", callback_data="show_instruction")]
+        [InlineKeyboardButton("✅ Проверить", callback_data="test")]
     ]
     await update.message.reply_text(
-        welcome_text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="HTML"
+        "🔄 Бот работает!",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-def main():
-    service_url = os.getenv("RENDER_EXTERNAL_URL")
-    if not service_url:
-        logger.error("Не удалось получить URL сервиса")
-        return
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик кнопок"""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("✅ Всё работает корректно!")
 
-    application = ApplicationBuilder().token(TOKEN).build()
+def main():
+    global bot, application
     
+    # Инициализация бота
+    application = ApplicationBuilder().token(TOKEN).build()
+    bot = application.bot
+    
+    # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    logger.info("Запускаем webhook...")
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url=f"{service_url}/{TOKEN}",
-        secret_token=os.getenv("WEBHOOK_SECRET", "default_secret")
-    )
+    # Установка вебхука
+    webhook_url = f"https://lifefocusbot-potapova-tgbot.onrender.com/{TOKEN}"
+    logger.info(f"Устанавливаем вебхук: {webhook_url}")
+    
+    # Запуск Flask
+    if __name__ == "__main__":
+        flask_app.run(host="0.0.0.0", port=PORT)
 
 if __name__ == "__main__":
     main()
