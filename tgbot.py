@@ -2,6 +2,8 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import os
+from flask import Flask
+import threading
 
 # Настройка логгирования
 logging.basicConfig(
@@ -19,7 +21,6 @@ PRACTICE_MESSAGE_ID = 192    # ID голосового сообщения с п�
 INSTRUCTION_MESSAGE_ID = 194 # ID видео с инструкцией
 
 async def check_subscription(user_id: int, app) -> bool:
-    """Проверка подписки на канал"""
     try:
         member = await app.bot.get_chat_member(
             chat_id=CHANNEL_USERNAME,
@@ -31,7 +32,6 @@ async def check_subscription(user_id: int, app) -> bool:
         return False
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик нажатий на кнопки"""
     query = update.callback_query
     await query.answer()
 
@@ -41,8 +41,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "✅ <b>Подписка подтверждена. Доступ к практике открыт</b>",
                 parse_mode="HTML"
             )
-            
-            # Пересылаем голосовое с практикой
             try:
                 await context.bot.copy_message(
                     chat_id=query.message.chat_id,
@@ -65,9 +63,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="HTML"
             )
-
     elif query.data == "show_instruction":
-        # Пересылаем видео с инструкцией
         try:
             await context.bot.copy_message(
                 chat_id=query.message.chat_id,
@@ -82,37 +78,30 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Очистка истории сообщений"""
     chat_id = update.effective_chat.id
     try:
-        # Удаляем последние 10 сообщений бота
         for i in range(1, 11):
             await context.bot.delete_message(chat_id, update.message.message_id - i)
     except Exception as e:
         logger.error(f"Ошибка удаления: {e}")
-    
-    await update.message.reply_text("🗑️ Последние за 48 часов сообщения бота удалены.")
+    await update.message.reply_text("🗑 Последние за 48 часов сообщения бота удалены.")
     await start(update, context)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Стартовое сообщение с улучшенным текстом"""
     welcome_text = """
 🌟 <b>Добро пожаловать в пространство практик для ЖИЗНИ 🌿</b>
 
-Здесь вы найдете инструменты для работы с разными состояниями: 
+Здесь вы найдете инструменты для работы с разными состояниями:
 • Гневом и раздражением
 • Тревогой и беспокойством
 • Апатией и усталостью
-
 <b>Сейчас доступна:</b>
 🧠 Практика <b>«Вторичные выгоды»</b> - помогает разорвать связь между скрытыми преимуществами и вашим негативным состоянием.
 """
-    
     keyboard = [
         [InlineKeyboardButton("✅ Проверить подписку", callback_data="check_sub")],
         [InlineKeyboardButton("📖 Инструкция", callback_data="show_instruction")]
     ]
-    
     await update.message.reply_text(
         welcome_text + "\n\n🎧 <b>Аудио-практики доступны после подписки на канал</b>",
         reply_markup=InlineKeyboardMarkup(keyboard),
@@ -120,26 +109,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ловим любое сообщение и выводим chat_id и message_id"""
     chat_id = update.effective_chat.id
     message_id = update.message.message_id
-
     await update.message.reply_text(
         f"📌 <b>Данные этого сообщения</b>\n"
         f"chat_id: <code>{chat_id}</code>\n"
         f"message_id: <code>{message_id}</code>",
         parse_mode="HTML"
     )
-
     logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
 
-if __name__ == "__main__":
-    app = Application.builder().token(TOKEN).build()
+# Запускаем Flask сервер для Render
+flask_app = Flask(__name__)
 
+@flask_app.route('/')
+def index():
+    return "Bot is running"
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=3000)
+
+def run_bot():
+    app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("clear", clear_history))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL, handle_any_message))
-
     logger.info("Бот успешно запущен!")
     app.run_polling()
+
+if __name__ == "__main__":
+    threading.Thread(target=run_flask).start()
+    run_bot()
