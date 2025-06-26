@@ -1,9 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import os
-from flask import Flask
-from telegram.ext import ApplicationBuilder
 
 # Настройка логгирования
 logging.basicConfig(
@@ -14,19 +12,12 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 # ID чата и сообщений с практиками
 SOURCE_CHAT_ID = 416561840
 PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
-
-# Создаем Flask приложение для health checks
-flask_app = Flask(__name__)
-
-@flask_app.route('/')
-def index():
-    return "Bot is running"
 
 async def check_subscription(user_id: int, app) -> bool:
     try:
@@ -119,20 +110,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    message_id = update.message.message_id
-    await update.message.reply_text(
-        f"📌 <b>Данные этого сообщения</b>\n"
-        f"chat_id: <code>{chat_id}</code>\n"
-        f"message_id: <code>{message_id}</code>",
-        parse_mode="HTML"
-    )
-    logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
-
-def run_flask():
-    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
-
 def main():
     # Создаем и настраиваем бота
     application = ApplicationBuilder().token(TOKEN).build()
@@ -141,20 +118,18 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.ALL, handle_any_message))
     
-    # Запускаем Flask в отдельном потоке
-    import threading
-    threading.Thread(target=run_flask, daemon=True).start()
+    # Только для отладки - можно отключить в продакшене
+    application.add_handler(MessageHandler(filters.ALL, handle_any_message))
     
     # Запускаем бота с webhook
     logger.info("Запускаем бота с webhook...")
     application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000)),
+        port=int(os.getenv("PORT", 5000)),
         url_path=TOKEN,
         webhook_url=WEBHOOK_URL + TOKEN,
-        secret_token='WEBHOOK_SECRET'  # Опционально для безопасности
+        secret_token='WEBHOOK_SECRET'
     )
 
 if __name__ == "__main__":
