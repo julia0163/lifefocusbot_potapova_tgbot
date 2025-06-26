@@ -11,7 +11,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-TOKEN = os.getenv("TELEGRAM_TOKEN")  # Изменил название переменной для Render
+TOKEN = os.getenv("TOKEN")  # Изменил название переменной для Render
 CHANNEL_USERNAME = "@potapova_psy"
 PORT = int(os.getenv("PORT", 5000))  # Порт для Render
 
