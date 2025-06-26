@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+
+app = ApplicationBuilder().token(TOKEN).build()
+
 
 # ID чата и сообщений с практиками
 SOURCE_CHAT_ID = 416561840  # ID чата, где хранятся медиафайлы
@@ -139,5 +143,11 @@ def run_bot():
     app.run_polling()
 
 if __name__ == "__main__":
+      app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        url_path=TOKEN,
+        webhook_url=WEBHOOK_URL + TOKEN
+    )
     threading.Thread(target=run_flask).start()
     run_bot()
