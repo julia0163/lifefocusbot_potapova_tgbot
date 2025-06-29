@@ -53,6 +53,14 @@ def main():
     )
     logger.info("Webhook установлен на: %s", WEBHOOK_URL)
 
+# В конце файла замените на:
 if __name__ == "__main__":
-    main()
+    # Для локального тестирования (раскомментируйте если нужно)
+    # application.run_polling()
+    
+    # Для продакшена на Render
+    application.bot.set_webhook(
+        url=WEBHOOK_URL,
+        secret_token=SECRET_TOKEN
+    )
     flask_app.run(host='0.0.0.0', port=3000)
