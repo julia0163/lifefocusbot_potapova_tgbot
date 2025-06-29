@@ -1,19 +1,23 @@
 import logging
 import os
+import threading
+import asyncio
+
 from flask import Flask, request, abort
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+    Application, CommandHandler, CallbackQueryHandler,
+    MessageHandler, filters, ContextTypes
 )
-import asyncio
 
-# Логгирование
+# Настройка логов
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
+# Переменные окружения и настройки
 TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
 
@@ -21,17 +25,18 @@ SOURCE_CHAT_ID = 416561840
 PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
 
-PORT = int(os.environ.get("PORT", "3000"))
+PORT = int(os.environ.get("PORT", 3000))
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL = f"https://lifefocusbot-potapova-tgbot.onrender.com{WEBHOOK_PATH}"
 
-# Flask приложение
+# Flask-приложение
 flask_app = Flask(__name__)
 
-# Telegram Application
+# Создаём Telegram-приложение
 application = Application.builder().token(TOKEN).build()
 
-# --- Хендлеры ---
+
+# ========= ЛОГИКА БОТА =========
 
 async def check_subscription(user_id: int, app: Application) -> bool:
     try:
@@ -43,6 +48,7 @@ async def check_subscription(user_id: int, app: Application) -> bool:
     except Exception as e:
         logger.error(f"Ошибка проверки подписки: {e}")
         return False
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -90,15 +96,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
 
-async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    try:
-        for i in range(1, 11):
-            await context.bot.delete_message(chat_id, update.message.message_id - i)
-    except Exception as e:
-        logger.error(f"Ошибка удаления сообщений: {e}")
-    await update.message.reply_text("🗑️ Последние за 48 часов сообщения бота удалены.")
-    await start(update, context)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = """
@@ -112,6 +109,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <b>Сейчас доступна:</b>
 🧠 Практика <b>«Вторичные выгоды»</b> - помогает разорвать связь между скрытыми преимуществами и вашим негативным состоянием.
 """
+
     keyboard = [
         [InlineKeyboardButton("✅ Проверить подписку", callback_data="check_sub")],
         [InlineKeyboardButton("📖 Инструкция", callback_data="show_instruction")]
@@ -121,6 +119,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML"
     )
+
+
+async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    try:
+        for i in range(1, 11):
+            await context.bot.delete_message(chat_id, update.message.message_id - i)
+    except Exception as e:
+        logger.error(f"Ошибка удаления сообщений: {e}")
+    await update.message.reply_text("🗑️ Последние за 48 часов сообщения бота удалены.")
+    await start(update, context)
+
 
 async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -133,44 +143,50 @@ async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
 
-# --- Регистрируем хендлеры ---
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("clear", clear_history))
-application.add_handler(CallbackQueryHandler(button_handler))
-application.add_handler(MessageHandler(filters.ALL, handle_any_message))
 
-# --- Flask маршруты ---
+# ========== FLASK HANDLERS ==========
 
 @flask_app.route("/")
 def index():
-    return "Bot is running"
+    return "Bot is running!"
+
 
 @flask_app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     if request.method == "POST":
         update = Update.de_json(request.get_json(force=True), application.bot)
-        application.update_queue.put_nowait(update)
+        asyncio.create_task(application.process_update(update))
         return "OK"
     else:
         abort(403)
+
+
+# ========== ЗАПУСК ==========
+def start_flask():
+    flask_app.run(host="0.0.0.0", port=PORT)
+
 
 async def set_webhook():
     await application.bot.set_webhook(WEBHOOK_URL)
     logger.info("Webhook установлен")
 
-def main():
-    # Запуск Flask
-    flask_app.run(host="0.0.0.0", port=PORT)
+
+async def main():
+    # Регистрируем обработчики
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("clear", clear_history))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.ALL, handle_any_message))
+
+    await application.initialize()
+    await set_webhook()
+    await application.start()
+    logger.info("Telegram application запущен")
+
 
 if __name__ == "__main__":
-    # Устанавливаем webhook и запускаем Flask и приложение Telegram
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
-    # Запускаем установку webhook
-    loop.run_until_complete(set_webhook())
-
-    # Запускаем Telegram Application — он обрабатывает обновления из update_queue
-    loop.create_task(application.start())
-
-    # Запускаем Flask в основном потоке (блокирующий вызов)
-    main()
+    threading.Thread(target=start_flask).start()
+    loop.run_until_complete(main())
