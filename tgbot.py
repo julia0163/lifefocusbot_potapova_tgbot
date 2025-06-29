@@ -62,7 +62,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
             await query.message.reply_text(
                 "Пожалуйста, подпишитесь на канал",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                reply_markup=InlineKeyboardMarkup(keyboard))
     elif query.data == "show_instruction":
         await context.bot.copy_message(
             chat_id=query.message.chat_id,
