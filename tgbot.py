@@ -143,7 +143,7 @@ def run_bot():
     app.add_handler(MessageHandler(filters.ALL, handle_any_message))
 
     logger.info("Бот успешно запущен!")
-    app.run_polling()
+    app.run_webhook(listen="0.0.0.0", port=PORT, webhook_url=WEBHOOK_URL)
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
