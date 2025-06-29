@@ -1,39 +1,38 @@
-from flask import Flask, request, Response
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
 import os
+from flask import Flask, request
+from telegram import Update, Bot
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-TOKEN = os.environ.get("BOT_TOKEN")  # Убедись, что переменная окружения BOT_TOKEN установлена
-WEBHOOK_PATH = f"/webhook/{TOKEN}"
-WEBHOOK_URL = f"https://<твое-доменное-имя-на-render>.onrender.com{WEBHOOK_PATH}"
+TOKEN = os.getenv("TOKEN")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "secret123")  # можно любое слово
+APP_URL = os.getenv("https://lifefocusbot-potapova-tgbot.onrender.com")  # https://your-render-url.onrender.com
 
 app = Flask(__name__)
+bot = Bot(token=TOKEN)
 application = Application.builder().token(TOKEN).build()
 
-
-# === Команды бота ===
+# Простая команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Бот работает через Webhook на Render!")
-
+    await update.message.reply_text("Привет! Бот работает 🤖")
 
 application.add_handler(CommandHandler("start", start))
 
+@app.route(f"/webhook/{WEBHOOK_SECRET}", methods=["POST"])
+async def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, bot)
+    await application.process_update(update)
+    return "ok"
 
-# === Webhook-обработчик ===
-@app.route(WEBHOOK_PATH, methods=["POST"])
-async def webhook() -> Response:
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.process_update(update)
-        return Response("OK", status=200)
+@app.route("/", methods=["GET"])
+def index():
+    return "Бот запущен!"
 
-
-# === Установка webhook (один раз при запуске) ===
-@app.before_first_request
-def set_webhook():
+if __name__ == "__main__":
     import asyncio
-    asyncio.run(application.bot.set_webhook(url=WEBHOOK_URL))
 
+    async def set_webhook():
+        await bot.set_webhook(f"{APP_URL}/webhook/{WEBHOOK_SECRET}")
 
-# Flask-приложение для gunicorn
-flask_app = app
+    asyncio.run(set_webhook())
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
