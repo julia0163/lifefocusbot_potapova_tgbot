@@ -8,6 +8,9 @@ from telegram.ext import (
     filters, ContextTypes
 )
 
+import telegram
+print("python-telegram-bot version:", telegram.__version__)
+
 # Настройка логгирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
