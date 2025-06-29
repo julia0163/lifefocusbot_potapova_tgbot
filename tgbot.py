@@ -1,49 +1,46 @@
-import os
-import logging
 from flask import Flask, request
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Включаем логирование
-logging.basicConfig(level=logging.INFO)
+import os
 
-# Переменные
-TOKEN = os.getenv("TOKEN")  # Задай это в Render → Environment
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "supersecret")
-APP_URL = "https://lifefocusbot-potapova-tgbot.onrender.com"
+TOKEN = os.getenv("TOKEN")  # В Render задаешь как Secret Env var
 
-# Flask-приложение
 app = Flask(__name__)
-bot = Bot(token=TOKEN)
 application = Application.builder().token(TOKEN).build()
 
-# Команда /start
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет, бот работает!")
+    await update.message.reply_text("Привет! Я живой бот!")
+
 
 application.add_handler(CommandHandler("start", start))
 
-# Webhook endpoint
-@app.post(f"/webhook/{WEBHOOK_SECRET}")
-async def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, bot)
-    await application.process_update(update)
-    return "OK"
 
-# Главная страница
-@app.route("/")
+@app.route("/", methods=["GET"])
 def index():
-    return "Бот жив!"
+    return "Bot is running!"
 
-# Запуск
+
+@app.route(f"/webhook/{TOKEN}", methods=["POST"])
+async def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    await application.process_update(update)
+    return "OK", 200
+
+
 if __name__ == "__main__":
     import asyncio
 
-    async def main():
-        url = f"{APP_URL}/webhook/{WEBHOOK_SECRET}"
-        await bot.set_webhook(url)
-        print(f"Webhook установлен: {url}")
-        app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
+    async def run():
+        await application.initialize()
+        await application.start()
+        await application.updater.start_webhook(
+            listen="0.0.0.0",
+            port=int(os.environ.get("PORT", 3000)),
+            url_path=f"webhook/{TOKEN}",
+            webhook_url=f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook/{TOKEN}",
+        )
+        await application.updater.idle()
 
-    asyncio.run(main())
+    asyncio.run(run())
