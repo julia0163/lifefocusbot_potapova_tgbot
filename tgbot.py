@@ -4,8 +4,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from dotenv import load_dotenv
 
-load_dotenv()  # если используешь .env файл
-TOKEN = os.getenv("TOKEN")  # или просто вставь напрямую строку
+load_dotenv()
+TOKEN = os.getenv("TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Я работаю!")
