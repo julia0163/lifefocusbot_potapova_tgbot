@@ -1,11 +1,10 @@
 import logging
 import os
-import threading
-from flask import Flask
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler,
-    filters, ContextTypes
+    filters, ContextTypes, CallbackContext
 )
 
 # Настройка логгирования
@@ -17,26 +16,29 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
+WEBHOOK_URL = os.getenv("https://https://lifefocusbot-potapova-tgbot.onrender.com")  # Должен быть https://your-service-name.onrender.com
 
 SOURCE_CHAT_ID = 416561840
 PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
 
-async def check_subscription(user_id: int, app: Application) -> bool:
+app = Flask(__name__)
+
+async def check_subscription(user_id: int, context: CallbackContext) -> bool:
     try:
-        member = await app.bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        member = await context.bot.get_chat_member(CHANNEL_USERNAME, user_id)
         return member.status in ["member", "administrator", "creator"]
     except Exception as e:
         logger.error(f"Ошибка проверки подписки: {e}")
         return False
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
 
     if query.data == "check_sub":
-        subscribed = await check_subscription(user_id, context.application)
+        subscribed = await check_subscription(user_id, context)
         if subscribed:
             await query.message.reply_text(
                 "✅ <b>Подписка подтверждена. Доступ к практике открыт</b>",
@@ -79,19 +81,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
 
-async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    message_id = update.message.message_id
-    # Удаляем последние 10 сообщений бота (лучше сделать проверку на владельца)
-    try:
-        for i in range(10):
-            await context.bot.delete_message(chat_id, message_id - i)
-    except Exception as e:
-        logger.warning(f"Ошибка удаления сообщений: {e}")
-    await update.message.reply_text("🗑️ Последние за 48 часов сообщения бота удалены.")
-    await start(update, context)
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: CallbackContext):
     welcome_text = (
         "🌟 <b>Добро пожаловать в пространство практик для ЖИЗНИ 🌿</b>\n\n"
         "Здесь вы найдете инструменты для работы с разными состояниями:\n"
@@ -111,37 +101,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    message_id = update.message.message_id
-    await update.message.reply_text(
-        f"📌 <b>Данные этого сообщения</b>\n"
-        f"chat_id: <code>{chat_id}</code>\n"
-        f"message_id: <code>{message_id}</code>",
-        parse_mode="HTML"
-    )
-    logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
-
-# Flask app для Render и других платформ
-flask_app = Flask(__name__)
-
-@flask_app.route('/')
+@app.route('/')
 def index():
     return "Bot is running"
 
-def run_flask():
-    # Включи debug=False, если продакшен
-    flask_app.run(host="0.0.0.0", port=3000)
+@app.route('/webhook', methods=['POST'])
+async def webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    async with ApplicationBuilder().token(TOKEN).build() as application:
+        await application.process_update(update)
+    return 'ok'
 
-def run_bot():
+def main():
+    # Создаем бота и настраиваем webhook
     application = Application.builder().token(TOKEN).build()
+    
+    # Добавляем обработчики
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.ALL, handle_any_message))
-    logger.info("Бот успешно запущен!")
-    application.run_polling()
+    
+    # Настраиваем webhook
+    if WEBHOOK_URL:
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=3000,
+            url_path=TOKEN,
+            webhook_url=f"{WEBHOOK_URL}/{TOKEN}"
+        )
+    else:
+        application.run_polling()
 
-if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    run_bot()
+if __name__ == '__main__':
+    main()
