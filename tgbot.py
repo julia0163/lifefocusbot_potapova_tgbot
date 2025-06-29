@@ -1,15 +1,11 @@
 import logging
 import os
-import threading
-from flask import Flask
+from flask import Flask, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler,
     filters, ContextTypes
 )
-
-import telegram
-print("python-telegram-bot version:", telegram.__version__)
 
 # Настройка логгирования
 logging.basicConfig(
@@ -20,14 +16,19 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
+WEBHOOK_URL = "https://your-render-url.onrender.com/webhook"  # Замени на свой URL!
 
 SOURCE_CHAT_ID = 416561840
 PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
 
-async def check_subscription(user_id: int, app: Application) -> bool:
+# Инициализация Flask и Telegram Application
+flask_app = Flask(__name__)
+application = Application.builder().token(TOKEN).build()
+
+async def check_subscription(user_id: int) -> bool:
     try:
-        member = await app.bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        member = await application.bot.get_chat_member(CHANNEL_USERNAME, user_id)
         return member.status in ["member", "administrator", "creator"]
     except Exception as e:
         logger.error(f"Ошибка проверки подписки: {e}")
@@ -39,12 +40,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
 
     if query.data == "check_sub":
-        subscribed = await check_subscription(user_id, context.application)
+        subscribed = await check_subscription(user_id)
         if subscribed:
-            await query.message.reply_text(
-                "✅ <b>Подписка подтверждена. Доступ к практике открыт</b>",
-                parse_mode="HTML"
-            )
+            await query.message.reply_text("✅ <b>Подписка подтверждена. Доступ к практике открыт</b>", parse_mode="HTML")
             try:
                 await context.bot.copy_message(
                     chat_id=query.message.chat_id,
@@ -53,10 +51,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception as e:
                 logger.error(f"Ошибка пересылки практики: {e}")
-                await query.message.reply_text(
-                    "❌ Не удалось загрузить практику. Попробуйте позже.",
-                    parse_mode="HTML"
-                )
+                await query.message.reply_text("❌ Не удалось загрузить практику. Попробуйте позже.", parse_mode="HTML")
         else:
             keyboard = [
                 [InlineKeyboardButton("📢 Подписаться", url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}")],
@@ -77,32 +72,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as e:
             logger.error(f"Ошибка пересылки инструкции: {e}")
-            await query.message.reply_text(
-                "❌ Не удалось загрузить инструкцию. Попробуйте позже.",
-                parse_mode="HTML"
-            )
-
-async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    message_id = update.message.message_id
-    # Удаляем последние 10 сообщений бота (лучше сделать проверку на владельца)
-    try:
-        for i in range(10):
-            await context.bot.delete_message(chat_id, message_id - i)
-    except Exception as e:
-        logger.warning(f"Ошибка удаления сообщений: {e}")
-    await update.message.reply_text("🗑️ Последние за 48 часов сообщения бота удалены.")
-    await start(update, context)
+            await query.message.reply_text("❌ Не удалось загрузить инструкцию. Попробуйте позже.", parse_mode="HTML")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "🌟 <b>Добро пожаловать в пространство практик для ЖИЗНИ 🌿</b>\n\n"
-        "Здесь вы найдете инструменты для работы с разными состояниями:\n"
-        "• Гневом и раздражением\n"
-        "• Тревогой и беспокойством\n"
-        "• Апатией и усталостью\n\n"
-        "<b>Сейчас доступна:</b>\n"
-        "🧠 Практика <b>«Вторичные выгоды»</b> - помогает разорвать связь между скрытыми преимуществами и вашим негативным состоянием."
+        "Здесь вы найдете инструменты для работы с разными состояниями..."
     )
     keyboard = [
         [InlineKeyboardButton("✅ Проверить подписку", callback_data="check_sub")],
@@ -114,37 +89,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML"
     )
 
-async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    message_id = update.message.message_id
-    await update.message.reply_text(
-        f"📌 <b>Данные этого сообщения</b>\n"
-        f"chat_id: <code>{chat_id}</code>\n"
-        f"message_id: <code>{message_id}</code>",
-        parse_mode="HTML"
-    )
-    logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
+# Регистрация обработчиков
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(button_handler))
+application.add_handler(MessageHandler(filters.ALL, lambda u, c: None))  # Игнорируем другие сообщения
 
-# Flask app для Render и других платформ
-flask_app = Flask(__name__)
+# Вебхук-эндпоинт для Flask
+@flask_app.route('/webhook', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(), application.bot)
+    application.update_queue.put(update)
+    return jsonify({"status": "ok"})
 
 @flask_app.route('/')
-def index():
-    return "Bot is running"
+def home():
+    return "Бот работает! Вебхук: /webhook"
 
-def run_flask():
-    # Включи debug=False, если продакшен
-    flask_app.run(host="0.0.0.0", port=3000)
-
-def run_bot():
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("clear", clear_history))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.ALL, handle_any_message))
-    logger.info("Бот успешно запущен!")
-    application.run_polling()
+def main():
+    # Установка вебхука при запуске
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=3000,
+        webhook_url=WEBHOOK_URL,
+        secret_token="your_secret_token"  # Опционально для безопасности
+    )
 
 if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    run_bot()
+    main()
