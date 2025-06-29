@@ -23,6 +23,10 @@ SOURCE_CHAT_ID = 416561840  # ID чата с медиафайлами
 PRACTICE_MESSAGE_ID = 192   # ID голосового сообщения с практикой
 INSTRUCTION_MESSAGE_ID = 194 # ID видео с инструкцией
 
+PORT = int(os.environ.get("PORT", "3000"))  # 3000 — запасной вариант
+WEBHOOK_URL = "https://lifefocusbot-potapova-tgbot.onrender.com/webhook"
+
+
 async def check_subscription(user_id: int, app: Application) -> bool:
     try:
         member = await app.bot.get_chat_member(
