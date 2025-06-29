@@ -8,15 +8,12 @@ BOT_TOKEN = os.getenv("TOKEN")
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Бот успешно работает! 🚀")
 
-async def main():
-    # Создаем приложение
+def main():
     application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Добавляем обработчик команды /start
     application.add_handler(CommandHandler("start", start))
     
-    # Запускаем бота в режиме polling (более надежный вариант)
-    await application.run_polling()
+    # Запускаем в режиме polling (без вебхуков)
+    application.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()  # Убрали asyncio.run для совместимости
