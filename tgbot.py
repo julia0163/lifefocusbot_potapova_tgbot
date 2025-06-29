@@ -14,7 +14,6 @@ async def main():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
 
-    # Запускаем вебхук
     await application.run_webhook(
         listen="0.0.0.0",
         port=PORT,
