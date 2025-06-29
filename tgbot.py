@@ -44,7 +44,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     # запускаем задачу через asyncio в фоновом режиме
-    asyncio.create_task(application.process_update(update))
+    asyncio.run(application.process_update(update))
     return "ok"
 
 # === Main ===
@@ -64,8 +64,8 @@ async def main():
         logger.info("Webhook установлен: %s", res.text)
 
     # Запускаем бота как фоновый таск
-    asyncio.create_task(application.initialize())
-    asyncio.create_task(application.start())
+    asyncio.run(application.initialize())
+    asyncio.run(application.start())
 
     # Flask блокирует поток, но Telegram Application работает в фоне
     flask_app.run(host="0.0.0.0", port=PORT)
