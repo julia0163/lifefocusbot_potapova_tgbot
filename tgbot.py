@@ -12,7 +12,7 @@ CHANNEL_USERNAME = "@potapova_psy"
 SOURCE_CHAT_ID = 416561840
 PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # например: https://yourapp.onrender.com
+WEBHOOK_URL = os.getenv("url=https://lifefocusbot-potapova-tgbot.onrender.com")  # например: https://yourapp.onrender.com
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
