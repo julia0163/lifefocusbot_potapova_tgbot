@@ -1,30 +1,26 @@
 import logging
 import os
-import threading
-from flask import Flask
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler,
-    filters, ContextTypes
+    ContextTypes, filters
 )
 
-# Настройка логгирования
+TOKEN = os.getenv("TOKEN")
+CHANNEL_USERNAME = "@potapova_psy"
+SOURCE_CHAT_ID = 416561840
+PRACTICE_MESSAGE_ID = 192
+INSTRUCTION_MESSAGE_ID = 194
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # например: https://yourapp.onrender.com
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.getenv("TOKEN")
-if not TOKEN:
-    logger.error("Токен не найден в переменных окружения. Задайте TOKEN и перезапустите бота.")
-    exit(1)
-
-CHANNEL_USERNAME = "@potapova_psy"
-
-SOURCE_CHAT_ID = 416561840
-PRACTICE_MESSAGE_ID = 192
-INSTRUCTION_MESSAGE_ID = 194
+app = Application.builder().token(TOKEN).build()
 
 async def check_subscription(user_id: int, app: Application) -> bool:
     try:
@@ -36,7 +32,6 @@ async def check_subscription(user_id: int, app: Application) -> bool:
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    logger.info(f"CallbackQuery received: data={query.data} from user={query.from_user.id}")
     await query.answer()
     user_id = query.from_user.id
 
@@ -87,7 +82,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     message_id = update.message.message_id
-    # Удаляем последние 10 сообщений (лучше добавить проверку прав)
     try:
         for i in range(10):
             await context.bot.delete_message(chat_id, message_id - i)
@@ -127,25 +121,28 @@ async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
 
-# Flask app для Render и других платформ
+# Flask Webhook сервер
 flask_app = Flask(__name__)
 
-@flask_app.route('/')
-def index():
+@flask_app.route("/")
+def home():
     return "Bot is running"
 
-def run_flask():
-    flask_app.run(host="0.0.0.0", port=3000, debug=False)
+@flask_app.route(f"/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), app.bot)
+    app.update_queue.put(update)
+    return "ok"
 
-def run_bot():
-    logger.info("Запуск Telegram бота...")
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("clear", clear_history))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.ALL, handle_any_message))
-    application.run_polling()
+def main():
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("clear", clear_history))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.ALL, handle_any_message))
+
+    # Установка webhook
+    app.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
 
 if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    run_bot()
+    main()
+    flask_app.run(host="0.0.0.0", port=3000)
