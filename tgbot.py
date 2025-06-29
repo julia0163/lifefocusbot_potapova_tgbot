@@ -146,6 +146,8 @@ def run_bot():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL, handle_any_message))
 
+    async def set_my_webhook(app):
+    await app.bot.set_webhook(WEBHOOK_URL)
     logger.info("Бот успешно запущен!")
     app.run_webhook(listen="0.0.0.0", port=PORT, webhook_url=WEBHOOK_URL)
 
