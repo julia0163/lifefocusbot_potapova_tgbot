@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
-WEBHOOK_URL = "https://your-render-url.onrender.com/webhook"  # Замени на свой URL!
+WEBHOOK_URL = "https://https://lifefocusbot-potapova-tgbot.onrender.com/webhook"  # Замени на свой URL!
 
 SOURCE_CHAT_ID = 416561840
 PRACTICE_MESSAGE_ID = 192
