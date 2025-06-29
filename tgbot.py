@@ -16,6 +16,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("TOKEN")
+if not TOKEN:
+    logger.error("Токен не найден в переменных окружения. Задайте TOKEN и перезапустите бота.")
+    exit(1)
+
 CHANNEL_USERNAME = "@potapova_psy"
 
 SOURCE_CHAT_ID = 416561840
@@ -32,6 +36,7 @@ async def check_subscription(user_id: int, app: Application) -> bool:
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    logger.info(f"CallbackQuery received: data={query.data} from user={query.from_user.id}")
     await query.answer()
     user_id = query.from_user.id
 
@@ -82,7 +87,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     message_id = update.message.message_id
-    # Удаляем последние 10 сообщений бота (лучше сделать проверку на владельца)
+    # Удаляем последние 10 сообщений (лучше добавить проверку прав)
     try:
         for i in range(10):
             await context.bot.delete_message(chat_id, message_id - i)
@@ -130,16 +135,15 @@ def index():
     return "Bot is running"
 
 def run_flask():
-    # Включи debug=False, если продакшен
-    flask_app.run(host="0.0.0.0", port=3000)
+    flask_app.run(host="0.0.0.0", port=3000, debug=False)
 
 def run_bot():
+    logger.info("Запуск Telegram бота...")
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.ALL, handle_any_message))
-    logger.info("Бот успешно запущен!")
     application.run_polling()
 
 if __name__ == "__main__":
