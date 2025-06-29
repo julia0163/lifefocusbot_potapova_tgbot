@@ -1,66 +1,51 @@
 import logging
-import os
-from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, ContextTypes
-)
 import asyncio
-import httpx
+import os
+
+from flask import Flask, request
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+
+# Настройка логов
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Получение токена и webhook пути
 
 TOKEN = "7942293176:AAGBdoQdO-EFBkI-dAjU5n8q0yvaZeOZe3g"
 WEBHOOK_HOST = "https://lifefocusbot-potapova-tgbot.onrender.com"
 WEBHOOK_PATH = f"/webhook"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-
+# Flask app
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-application = Application.builder().token(TOKEN).build()
+# Инициализация Telegram приложения
+application = Application.builder().token(BOT_TOKEN).build()
 
-# Команда /start
+# Глобальный event loop
+loop = asyncio.get_event_loop()
+
+# Пример команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("Нажми меня", callback_data="button_click")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Привет! Нажми кнопку ниже.", reply_markup=reply_markup)
+    await update.message.reply_text("Привет! Бот работает 🎉")
 
-# Обработка кнопки
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("Ты нажал кнопку!")
-
+# Обработчик команды
 application.add_handler(CommandHandler("start", start))
-application.add_handler(CallbackQueryHandler(button_handler))
 
-
+# Webhook обработчик
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run(application.process_update(update))
+    loop.create_task(application.process_update(update))
     return "ok"
 
-
-@app.route("/", methods=["GET"])
-def index():
-    return "OK", 200
-
-
+# Установка Webhook и запуск Flask
 async def set_webhook():
-    async with httpx.AsyncClient() as client:
-        r = await client.post(
-            f"https://api.telegram.org/bot{TOKEN}/setWebhook",
-            json={"url": WEBHOOK_URL}
-        )
-        logger.info("Webhook установлен: %s", r.text)
-
-async def main():
-    await application.initialize()
-    await set_webhook()
-    logger.info("Запуск Flask-сервера...")
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-
+    await application.bot.set_webhook(WEBHOOK_URL)
+    logger.info("Webhook установлен: %s", WEBHOOK_URL)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop.run_until_complete(set_webhook())  # Устанавливаем Webhook
+    app.run(host="0.0.0.0", port=10000)     # Запускаем Flask
