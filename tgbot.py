@@ -1,14 +1,13 @@
 import logging
+import os
+from flask import Flask, request, abort
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 )
-import os
-from flask import Flask
-import threading
 import asyncio
 
-# Логирование
+# Логгирование
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -23,7 +22,16 @@ PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
 
 PORT = int(os.environ.get("PORT", "3000"))
-WEBHOOK_URL = "https://lifefocusbot-potapova-tgbot.onrender.com/webhook"
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL = f"https://lifefocusbot-potapova-tgbot.onrender.com{WEBHOOK_PATH}"
+
+# Flask приложение
+flask_app = Flask(__name__)
+
+# Telegram Application
+application = Application.builder().token(TOKEN).build()
+
+# --- Хендлеры ---
 
 async def check_subscription(user_id: int, app: Application) -> bool:
     try:
@@ -125,35 +133,44 @@ async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
 
-# Flask сервер (для проверки работоспособности)
-flask_app = Flask(__name__)
+# --- Регистрируем хендлеры ---
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("clear", clear_history))
+application.add_handler(CallbackQueryHandler(button_handler))
+application.add_handler(MessageHandler(filters.ALL, handle_any_message))
 
-@flask_app.route('/')
+# --- Flask маршруты ---
+
+@flask_app.route("/")
 def index():
     return "Bot is running"
 
-def run_flask():
-    # Flask в отдельном потоке (если нужно)
-    flask_app.run(host="0.0.0.0", port=3000)
+@flask_app.route(WEBHOOK_PATH, methods=["POST"])
+def webhook():
+    if request.method == "POST":
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        application.update_queue.put_nowait(update)
+        return "OK"
+    else:
+        abort(403)
 
-async def main():
-    app = Application.builder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("clear", clear_history))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.ALL, handle_any_message))
-
-    # Установка webhook
-    await app.bot.set_webhook(WEBHOOK_URL)
+async def set_webhook():
+    await application.bot.set_webhook(WEBHOOK_URL)
     logger.info("Webhook установлен")
 
-    # Запуск webhook сервера Telegram
-    await app.run_webhook(listen="0.0.0.0", port=PORT, webhook_url=WEBHOOK_URL)
+def main():
+    # Запуск Flask
+    flask_app.run(host="0.0.0.0", port=PORT)
 
 if __name__ == "__main__":
-    # Запускаем Flask в отдельном потоке (опционально)
-    threading.Thread(target=run_flask).start()
+    # Устанавливаем webhook и запускаем Flask и приложение Telegram
+    loop = asyncio.get_event_loop()
 
-    # Запускаем бота с webhook
-    asyncio.run(main())
+    # Запускаем установку webhook
+    loop.run_until_complete(set_webhook())
+
+    # Запускаем Telegram Application — он обрабатывает обновления из update_queue
+    loop.create_task(application.start())
+
+    # Запускаем Flask в основном потоке (блокирующий вызов)
+    main()
