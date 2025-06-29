@@ -92,7 +92,7 @@ def main():
     setup_application()
     
     if 'RENDER' in os.environ:
-        webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/webhook"
+        webhook_url = f"https://{os.environ.get('https://lifefocusbot-potapova-tgbot.onrender.com')}/webhook"
         application.run_webhook(
             listen="0.0.0.0",
             port=PORT,
