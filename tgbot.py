@@ -1,81 +1,54 @@
-import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import os
-from flask import Flask, request, jsonify
-import asyncio
+import logging
+from fastapi import FastAPI, Request
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes
+)
 
-# Настройка логирования
+# Логирование
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-TOKEN = os.getenv("TOKEN")
-PORT = int(os.getenv("PORT", 10000))
+# Конфигурация
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
 
-app = Flask(__name__)
-application = None
+# Создание бота
+application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# Хендлеры
+# Хэндлеры
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("✅ Проверить", callback_data="test")]]
-    await update.message.reply_text(
-        "🔄 Бот работает!",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text("Привет! Бот работает.")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("✅ Всё работает корректно!")
+    await update.callback_query.answer("Кнопка нажата!")
 
-# Синхронный обработчик вебхука
-@app.route(f'/webhook/{TOKEN}', methods=['POST'])
-def webhook():
-    try:
-        json_data = request.get_json(force=True)
-        logger.info(f"Received update: {json_data}")
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(button_handler))
 
-        update = Update.de_json(json_data, application.bot)
-        asyncio.run(application.process_update(update))
+# FastAPI app
+app = FastAPI()
 
-        return jsonify({"status": "ok"}), 200
-    except Exception as e:
-        logger.error(f"Error processing update: {str(e)}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)}), 500
+@app.on_event("startup")
+async def startup():
+    await application.initialize()
+    await application.bot.set_webhook(WEBHOOK_URL)
+    await application.start()
 
-@app.route('/health')
-def health():
-    return jsonify({
-        "status": "OK",
-        "bot_initialized": application is not None,
-        "webhook_url": f"/webhook/{TOKEN}"
-    }), 200
+@app.on_event("shutdown")
+async def shutdown():
+    await application.stop()
+    await application.shutdown()
 
-async def setup_application():
-    global application
-    application = ApplicationBuilder().token(TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_handler))
-
-    webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook/{TOKEN}"
-    await application.bot.set_webhook(webhook_url, drop_pending_updates=True)
-    logger.info(f"Webhook configured: {webhook_url}")
-
-def run_server():
-    from hypercorn.asyncio import serve
-    from hypercorn.config import Config
-
-    config = Config()
-    config.bind = [f"0.0.0.0:{PORT}"]
-    asyncio.run(serve(app, config))
-
-if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(setup_application())
-    run_server()
-
+@app.post("/webhook")
+async def webhook(request: Request):
+    data = await request.json()
+    update = Update.de_json(data, application.bot)
+    await application.process_update(update)
+    return {"ok": True}
