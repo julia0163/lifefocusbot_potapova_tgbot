@@ -50,7 +50,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 await query.message.reply_text(
                     "❌ Подписка не найдена",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
+                    reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:
         logger.error(f"Ошибка в button_handler: {e}")
 
