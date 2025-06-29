@@ -1,6 +1,5 @@
-import os
 import logging
-import threading
+import os
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -8,43 +7,53 @@ from telegram.ext import (
     ContextTypes, filters
 )
 
-# --- Настройка логов ---
+# Настройка логирования
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# --- Конфигурация ---
-TOKEN = os.getenv("TOKEN")
+# Константы
+TOKEN = os.getenv("TOKEN")  # или напрямую вставь токен сюда
 CHANNEL_USERNAME = "@potapova_psy"
+
 SOURCE_CHAT_ID = 416561840
 PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
 
-# --- Flask-приложение ---
+# Flask-приложение
 flask_app = Flask(__name__)
-app: Application = None  # Инициализируем позже
+application = Application.builder().token(TOKEN).build()
 
+@flask_app.route('/')
+def index():
+    return "Бот работает!"
 
-# --- Проверка подписки ---
-async def check_subscription(user_id: int, app_instance: Application) -> bool:
+@flask_app.route('/webhook', methods=['POST'])
+async def webhook():
+    if request.method == "POST":
+        await application.update_queue.put(Update.de_json(request.get_json(force=True), application.bot))
+    return "ok"
+
+# Проверка подписки
+async def check_subscription(user_id: int, app: Application) -> bool:
     try:
-        member = await app_instance.bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        member = await app.bot.get_chat_member(CHANNEL_USERNAME, user_id)
         return member.status in ["member", "administrator", "creator"]
     except Exception as e:
-        logger.error(f"Ошибка при проверке подписки: {e}")
+        logger.error(f"Ошибка проверки подписки: {e}")
         return False
 
-
-# --- Обработка кнопок ---
+# Обработка кнопок
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
 
     if query.data == "check_sub":
-        if await check_subscription(user_id, context.application):
+        subscribed = await check_subscription(user_id, context.application)
+        if subscribed:
             await query.message.reply_text(
                 "✅ <b>Подписка подтверждена. Доступ к практике открыт</b>",
                 parse_mode="HTML"
@@ -56,7 +65,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     message_id=PRACTICE_MESSAGE_ID
                 )
             except Exception as e:
-                logger.error(f"Ошибка отправки практики: {e}")
+                logger.error(f"Ошибка пересылки практики: {e}")
                 await query.message.reply_text("❌ Не удалось загрузить практику.")
         else:
             keyboard = [
@@ -77,88 +86,61 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message_id=INSTRUCTION_MESSAGE_ID
             )
         except Exception as e:
-            logger.error(f"Ошибка отправки инструкции: {e}")
+            logger.error(f"Ошибка пересылки инструкции: {e}")
             await query.message.reply_text("❌ Не удалось загрузить инструкцию.")
 
-
-# --- Команды ---
+# Команды
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome = (
+    welcome_text = (
         "🌟 <b>Добро пожаловать в пространство практик для ЖИЗНИ 🌿</b>\n\n"
-        "Здесь вы найдете инструменты для работы с:\n"
-        "• Гневом и раздражением\n"
-        "• Тревогой и беспокойством\n"
-        "• Апатией и усталостью\n\n"
-        "<b>Сейчас доступна:</b>\n"
-        "🧠 Практика <b>«Вторичные выгоды»</b>\n\n"
-        "🎧 <b>Аудио-практики доступны после подписки на канал</b>"
+        "🧠 Доступна практика <b>«Вторичные выгоды»</b>\n"
+        "🎧 Аудио будет доступно после подписки на канал."
     )
     keyboard = [
         [InlineKeyboardButton("✅ Проверить подписку", callback_data="check_sub")],
         [InlineKeyboardButton("📖 Инструкция", callback_data="show_instruction")]
     ]
     await update.message.reply_text(
-        welcome,
+        welcome_text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML"
     )
 
-
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    message_id = update.message.message_id
     try:
         for i in range(10):
-            await context.bot.delete_message(chat_id, update.message.message_id - i)
+            await context.bot.delete_message(chat_id, message_id - i)
     except Exception as e:
-        logger.warning(f"Ошибка при удалении сообщений: {e}")
-    await update.message.reply_text("🗑️ История очищена.")
+        logger.warning(f"Ошибка удаления сообщений: {e}")
+    await update.message.reply_text("🗑️ Сообщения очищены.")
     await start(update, context)
-
 
 async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     message_id = update.message.message_id
-    logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
     await update.message.reply_text(
-        f"📌 <b>chat_id:</b> <code>{chat_id}</code>\n"
-        f"<b>message_id:</b> <code>{message_id}</code>",
+        f"chat_id: <code>{chat_id}</code>\nmessage_id: <code>{message_id}</code>",
         parse_mode="HTML"
     )
 
+# Регистрация хендлеров
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("clear", clear_history))
+application.add_handler(CallbackQueryHandler(button_handler))
+application.add_handler(MessageHandler(filters.ALL, handle_any_message))
 
-# --- Webhook маршрут ---
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), app.bot)
-        app.update_queue.put(update)
-    return "ok"
-
-
-@flask_app.route("/")
-def index():
-    return "Bot is running"
-
-
-# --- Запуск приложения ---
-def run():
-    global app
-    app = Application.builder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("clear", clear_history))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.ALL, handle_any_message))
-
-    # Устанавливаем Webhook URL
-    webhook_url = f"https://lifefocusbot-potapova-tgbot.onrender.com/webhook"
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=3000,
-        webhook_url=webhook_url
-    )
-
+# Запуск бота (установим webhook)
+async def set_webhook():
+    url = os.getenv("https://lifefocusbot-potapova-tgbot.onrender.com") + "/webhook"
+    await application.bot.set_webhook(url)
 
 if __name__ == "__main__":
-    threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=3000), daemon=True).start()
-    run()
+    import asyncio
+    asyncio.run(set_webhook())
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=3000,
+        webhook_url=os.getenv("https://lifefocusbot-potapova-tgbot.onrender.com/") + "/webhook"
+    )
