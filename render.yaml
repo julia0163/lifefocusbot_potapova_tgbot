@@ -3,7 +3,7 @@ services:
     name: telegram-bot
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python your_script.py
+    startCommand: python tgbot.py
     envVars:
       - key: TOKEN
         sync: false
