@@ -16,7 +16,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("TOKEN")
 WEBHOOK_URL = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
 
 # Создание бота
