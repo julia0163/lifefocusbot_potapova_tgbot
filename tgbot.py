@@ -1,9 +1,12 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+)
 import os
 from flask import Flask
 import threading
+import asyncio
 
 # Настройка логгирования
 logging.basicConfig(
@@ -16,11 +19,11 @@ TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
 
 # ID чата и сообщений с практиками
-SOURCE_CHAT_ID = 416561840  # ID чата, где хранятся медиафайлы
-PRACTICE_MESSAGE_ID = 192    # ID голосового сообщения с практикой
+SOURCE_CHAT_ID = 416561840  # ID чата с медиафайлами
+PRACTICE_MESSAGE_ID = 192   # ID голосового сообщения с практикой
 INSTRUCTION_MESSAGE_ID = 194 # ID видео с инструкцией
 
-async def check_subscription(user_id: int, app) -> bool:
+async def check_subscription(user_id: int, app: Application) -> bool:
     try:
         member = await app.bot.get_chat_member(
             chat_id=CHANNEL_USERNAME,
@@ -55,7 +58,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         else:
             keyboard = [
-                [InlineKeyboardButton("📢 Подписаться", url="https://t.me/potapova_psy")],
+                [InlineKeyboardButton("📢 Подписаться", url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}")],
                 [InlineKeyboardButton("✅ Я подписался", callback_data="check_sub")]
             ]
             await query.message.reply_text(
@@ -80,10 +83,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     try:
+        # Удаляем последние 10 сообщений бота (если они есть)
         for i in range(1, 11):
             await context.bot.delete_message(chat_id, update.message.message_id - i)
     except Exception as e:
-        logger.error(f"Ошибка удаления: {e}")
+        logger.error(f"Ошибка удаления сообщений: {e}")
     await update.message.reply_text("🗑️ Последние за 48 часов сообщения бота удалены.")
     await start(update, context)
 
@@ -120,7 +124,7 @@ async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
 
-# Запускаем Flask сервер для Render
+# Flask сервер для Render
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -132,10 +136,12 @@ def run_flask():
 
 def run_bot():
     app = Application.builder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("clear", clear_history))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL, handle_any_message))
+
     logger.info("Бот успешно запущен!")
     app.run_polling()
 
