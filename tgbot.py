@@ -7,33 +7,50 @@ from telegram.ext import (
     filters, ContextTypes
 )
 
-# Настройка логгирования
+# ===== 1. НАСТРОЙКА ЛОГГИРОВАНИЯ =====
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
+# ===== 2. КОНФИГУРАЦИЯ =====
 TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
-WEBHOOK_URL = "https://https://lifefocusbot-potapova-tgbot.onrender.com/webhook"  # Замените на ваш URL
-SECRET_TOKEN = "your_secret_key"  # Сгенерируйте сложный ключ
+WEBHOOK_URL = os.getenv("https://https://lifefocusbot-potapova-tgbot.onrender.com") + "/webhook" if os.getenv("WEBHOOK_URL") else None
+SECRET_TOKEN = os.getenv("SECRET_TOKEN", "default_secret_token")
 
-# Инициализация приложения
+# ===== 3. ОБРАБОТЧИКИ КОМАНД =====
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /start"""
+    keyboard = [
+        [InlineKeyboardButton("✅ Проверить подписку", callback_data="check_sub")],
+        [InlineKeyboardButton("📖 Инструкция", callback_data="show_instruction")]
+    ]
+    await update.message.reply_text(
+        "🌟 <b>Добро пожаловать!</b>",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
+    )
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик нажатий на кнопки"""
+    query = update.callback_query
+    await query.answer()
+    # ... (ваш существующий код обработки кнопок)
+
+# ===== 4. ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ =====
 application = Application.builder().token(TOKEN).build()
 flask_app = Flask(__name__)
-
-# Ваши обработчики (start, button_handler и др.) остаются без изменений
-# ...
 
 # Регистрация обработчиков
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(button_handler))
-application.add_handler(MessageHandler(filters.ALL, handle_any_message))
+application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, lambda u, c: None))
 
-# Вебхук-эндпоинт
+# ===== 5. ВЕБХУК ЭНДПОИНТ =====
 @flask_app.route('/webhook', methods=['POST'])
-def webhook():
+def webhook_handler():
     if request.headers.get('X-Telegram-Bot-Api-Secret-Token') != SECRET_TOKEN:
         return jsonify({"status": "forbidden"}), 403
     
@@ -42,25 +59,19 @@ def webhook():
     return jsonify({"status": "ok"})
 
 @flask_app.route('/')
-def index():
-    return "Bot is running in webhook mode"
+def home():
+    return "Бот работает в режиме вебхука"
 
-def main():
-    # Установка вебхука
-    application.bot.set_webhook(
-        url=WEBHOOK_URL,
-        secret_token=SECRET_TOKEN
-    )
-    logger.info("Webhook установлен на: %s", WEBHOOK_URL)
+# ===== 6. ЗАПУСК =====
+def setup_webhook():
+    """Установка вебхука при старте"""
+    if WEBHOOK_URL:
+        application.bot.set_webhook(
+            url=WEBHOOK_URL,
+            secret_token=SECRET_TOKEN
+        )
+        logger.info(f"Вебхук установлен на: {WEBHOOK_URL}")
 
-# В конце файла замените на:
 if __name__ == "__main__":
-    # Для локального тестирования (раскомментируйте если нужно)
-    # application.run_polling()
-    
-    # Для продакшена на Render
-    application.bot.set_webhook(
-        url=WEBHOOK_URL,
-        secret_token=SECRET_TOKEN
-    )
+    setup_webhook()
     flask_app.run(host='0.0.0.0', port=3000)
