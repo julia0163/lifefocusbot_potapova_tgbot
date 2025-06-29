@@ -8,7 +8,7 @@ from flask import Flask
 import threading
 import asyncio
 
-# Настройка логгирования
+# Логирование
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -18,14 +18,12 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("TOKEN")
 CHANNEL_USERNAME = "@potapova_psy"
 
-# ID чата и сообщений с практиками
-SOURCE_CHAT_ID = 416561840  # ID чата с медиафайлами
-PRACTICE_MESSAGE_ID = 192   # ID голосового сообщения с практикой
-INSTRUCTION_MESSAGE_ID = 194 # ID видео с инструкцией
+SOURCE_CHAT_ID = 416561840
+PRACTICE_MESSAGE_ID = 192
+INSTRUCTION_MESSAGE_ID = 194
 
-PORT = int(os.environ.get("PORT", "3000"))  # 3000 — запасной вариант
+PORT = int(os.environ.get("PORT", "3000"))
 WEBHOOK_URL = "https://lifefocusbot-potapova-tgbot.onrender.com/webhook"
-
 
 async def check_subscription(user_id: int, app: Application) -> bool:
     try:
@@ -87,7 +85,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     try:
-        # Удаляем последние 10 сообщений бота (если они есть)
         for i in range(1, 11):
             await context.bot.delete_message(chat_id, update.message.message_id - i)
     except Exception as e:
@@ -128,7 +125,7 @@ async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     logger.info(f"Получено сообщение: chat_id={chat_id}, message_id={message_id}")
 
-# Flask сервер для Render
+# Flask сервер (для проверки работоспособности)
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -136,9 +133,10 @@ def index():
     return "Bot is running"
 
 def run_flask():
+    # Flask в отдельном потоке (если нужно)
     flask_app.run(host="0.0.0.0", port=3000)
 
-def run_bot():
+async def main():
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -146,11 +144,16 @@ def run_bot():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL, handle_any_message))
 
-    async def set_my_webhook(app):
+    # Установка webhook
     await app.bot.set_webhook(WEBHOOK_URL)
-    logger.info("Бот успешно запущен!")
-    app.run_webhook(listen="0.0.0.0", port=PORT, webhook_url=WEBHOOK_URL)
+    logger.info("Webhook установлен")
+
+    # Запуск webhook сервера Telegram
+    await app.run_webhook(listen="0.0.0.0", port=PORT, webhook_url=WEBHOOK_URL)
 
 if __name__ == "__main__":
+    # Запускаем Flask в отдельном потоке (опционально)
     threading.Thread(target=run_flask).start()
-    run_bot()
+
+    # Запускаем бота с webhook
+    asyncio.run(main())
