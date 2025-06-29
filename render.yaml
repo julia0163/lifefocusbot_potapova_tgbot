@@ -1,9 +1,10 @@
 services:
   - type: web
-    name: lifefocusbot
+    name: telegram-bot
     env: python
-    buildCommand: ""
-    startCommand: gunicorn -b 0.0.0.0:3000 main:app
+    buildCommand: pip install -r requirements.txt
+    startCommand: python your_script.py
     envVars:
-      - key: BOT_TOKEN
-        value: <ТВОЙ_ТОКЕН_БОТА>
+      - key: TOKEN
+        sync: false
+    autoDeploy: true
