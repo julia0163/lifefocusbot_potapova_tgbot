@@ -105,14 +105,12 @@ def webhook():
 def home():
     return "Бот работает! Вебхук: /webhook"
 
-def main():
-    # Установка вебхука при запуске
+# В самом конце файла tgbot.py замени main() на:
+if __name__ == "__main__":
+    # Установка вебхука
     application.run_webhook(
         listen="0.0.0.0",
         port=3000,
         webhook_url=WEBHOOK_URL,
-        secret_token="your_secret_token"  # Опционально для безопасности
+        secret_token="your_secret_token"
     )
-
-if __name__ == "__main__":
-    main()
