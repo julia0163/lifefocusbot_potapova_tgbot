@@ -22,7 +22,7 @@ WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 app = Flask(__name__)
 
 # Инициализация Telegram приложения
-application = Application.builder().token(BOT_TOKEN).build()
+application = Application.builder().token(TOKEN).build()
 
 # Глобальный event loop
 loop = asyncio.get_event_loop()
