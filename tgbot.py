@@ -19,10 +19,10 @@ CHANNEL_USERNAME = "@potapova_psy"
 SOURCE_CHAT_ID = 416561840
 PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
-PORT = int(os.environ.get('PORT', 10000))
+PORT = int(os.environ.get('PORT', 5000))  # Изменили порт на 5000 (стандартный для Flask)
 
 app = Flask(__name__)
-application = None  # Глобальная переменная для экземпляра Application
+application = Application.builder().token(TOKEN).build()
 
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
@@ -60,7 +60,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📢 Подписаться", url=f"https://t.me/{CHANNEL_USERNAME[1:]}")],
                 [InlineKeyboardButton("✅ Проверить подписку", callback_data="check_sub")]
             ]
-            await query.message.reply_text(
+            await query.edit_message_text(
                 "Пожалуйста, подпишитесь на канал",
                 reply_markup=InlineKeyboardMarkup(keyboard))
     elif query.data == "show_instruction":
@@ -77,16 +77,13 @@ def home():
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     if request.method == "POST":
-        update = Update.de_json(request.get_json(), application.bot)
-        await application.update_queue.put(update)
+        json_data = request.get_json()
+        update = Update.de_json(json_data, application.bot)
+        await application.process_update(update)
     return "ok"
 
-def setup_application():
-    global application
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, lambda u, c: None))
+def run_flask():
+    app.run(host='0.0.0.0', port=PORT)
 
 def main():
     # Регистрация обработчиков
@@ -95,18 +92,24 @@ def main():
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, lambda u, c: None))
 
     if 'RENDER' in os.environ:
-        # Режим вебхука на Render
-        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"  # ← замените на ваш реальный домен!
+        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"  # Замените на ваш домен!
         webhook_url = f"https://{WEBHOOK_HOST}/webhook"
         
         logger.info(f"Starting webhook on: {webhook_url}")
         
+        # Запускаем Flask в отдельном потоке
+        from threading import Thread
+        flask_thread = Thread(target=run_flask)
+        flask_thread.start()
+        
+        # Устанавливаем вебхук
         application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
             webhook_url=webhook_url,
+            port=PORT,
             drop_pending_updates=True
         )
     else:
-        # Локальный режим с поллингом
         application.run_polling()
+
+if __name__ == '__main__':
+    main()
