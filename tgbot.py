@@ -95,7 +95,7 @@ def main():
 
     if 'RENDER' in os.environ:
         # Режим для Render
-        WEBHOOK_HOST = "your-render-service-name.onrender.com"  # Замените на ваш!
+        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"  # Замените на ваш!
         webhook_url = f"https://{WEBHOOK_HOST}/webhook"
         
         logger.info(f"Starting webhook on: {webhook_url}")
