@@ -87,29 +87,30 @@ def webhook():
     return "ok"
 
 # Основная функция
-def main():
-    # Регистрация обработчиков команд
+async def main():
+    # Регистрация обработчиков
     bot_application.add_handler(CommandHandler("start", start))
     bot_application.add_handler(CallbackQueryHandler(button_handler))
-    bot_application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, lambda u, c: None))
-
+    
     if 'RENDER' in os.environ:
-        # Режим для Render
-        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"  # Замените на ваш!
+        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"
         webhook_url = f"https://{WEBHOOK_HOST}/webhook"
         
-        logger.info(f"Starting webhook on: {webhook_url}")
-        
-        # Установка вебхука
-        bot_application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            webhook_url=webhook_url,
+        # Принудительная установка вебхука
+        await bot_application.bot.set_webhook(
+            url=webhook_url,
             drop_pending_updates=True
         )
+        logger.info(f"Webhook установлен на {webhook_url}")
+        
+        # Запуск
+        await bot_application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            webhook_url=webhook_url
+        )
     else:
-        # Локальный режим
-        bot_application.run_polling()
+        await bot_application.run_polling()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())  # Используем asyncio для Python 3.7+
