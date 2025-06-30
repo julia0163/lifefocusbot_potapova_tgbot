@@ -89,11 +89,18 @@ def setup_application():
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, lambda u, c: None))
 
 def main():
-    setup_application()
-    
+    # Регистрация обработчиков
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, lambda u, c: None))
+
     if 'RENDER' in os.environ:
-        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"  # ← замените на ваш!
-webhook_url = f"https://{WEBHOOK_HOST}/webhook"
+        # Режим вебхука на Render
+        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"  # ← замените на ваш реальный домен!
+        webhook_url = f"https://{WEBHOOK_HOST}/webhook"
+        
+        logger.info(f"Starting webhook on: {webhook_url}")
+        
         application.run_webhook(
             listen="0.0.0.0",
             port=PORT,
@@ -101,7 +108,5 @@ webhook_url = f"https://{WEBHOOK_HOST}/webhook"
             drop_pending_updates=True
         )
     else:
+        # Локальный режим с поллингом
         application.run_polling()
-
-if __name__ == '__main__':
-    main()
