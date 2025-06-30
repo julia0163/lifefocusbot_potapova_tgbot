@@ -1,5 +1,6 @@
 import logging
 import os
+import asyncio  # Добавлен импорт asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -88,29 +89,32 @@ def webhook():
 
 # Основная функция
 async def main():
-    # Регистрация обработчиков
+    # Регистрация обработчиков команд
     bot_application.add_handler(CommandHandler("start", start))
     bot_application.add_handler(CallbackQueryHandler(button_handler))
-    
+    bot_application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, lambda u, c: None))
+
     if 'RENDER' in os.environ:
-        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"
+        # Режим для Render
+        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"  # Замените на ваш!
         webhook_url = f"https://{WEBHOOK_HOST}/webhook"
         
-        # Принудительная установка вебхука
+        logger.info(f"Starting webhook on: {webhook_url}")
+        
+        # Установка вебхука
         await bot_application.bot.set_webhook(
             url=webhook_url,
             drop_pending_updates=True
         )
-        logger.info(f"Webhook установлен на {webhook_url}")
         
-        # Запуск
+        # Запуск вебхука
         await bot_application.run_webhook(
             listen="0.0.0.0",
-            port=PORT,
-            webhook_url=webhook_url
+            port=PORT
         )
     else:
+        # Локальный режим
         await bot_application.run_polling()
 
 if __name__ == '__main__':
-    asyncio.run(main())  # Используем asyncio для Python 3.7+
+    asyncio.run(main())
