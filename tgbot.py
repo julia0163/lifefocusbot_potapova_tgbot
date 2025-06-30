@@ -1,6 +1,5 @@
 import logging
 import os
-import asyncio  # Добавлен импорт asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -23,9 +22,9 @@ PRACTICE_MESSAGE_ID = 192
 INSTRUCTION_MESSAGE_ID = 194
 PORT = int(os.environ.get('PORT', 5000))
 
-# Инициализация приложений
+# Инициализация приложения
 app = Flask(__name__)
-bot_application = Application.builder().token(TOKEN).build()
+application = Application.builder().token(TOKEN).build()
 
 # Функции бота
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -83,38 +82,36 @@ def home():
 def webhook():
     if request.method == "POST":
         json_data = request.get_json()
-        update = Update.de_json(json_data, bot_application.bot)
-        bot_application.update_queue.put(update)
+        update = Update.de_json(json_data, application.bot)
+        application.update_queue.put(update)
     return "ok"
 
-# Основная функция
-async def main():
-    # Регистрация обработчиков команд
-    bot_application.add_handler(CommandHandler("start", start))
-    bot_application.add_handler(CallbackQueryHandler(button_handler))
-    bot_application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, lambda u, c: None))
+def setup_application():
+    # Регистрация обработчиков
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, lambda u, c: None))
 
+def run_bot():
+    setup_application()
+    
     if 'RENDER' in os.environ:
         # Режим для Render
-        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"  # Замените на ваш!
+        WEBHOOK_HOST = "lifefocusbot-potapova-tgbot.onrender.com"
         webhook_url = f"https://{WEBHOOK_HOST}/webhook"
         
         logger.info(f"Starting webhook on: {webhook_url}")
         
         # Установка вебхука
-        await bot_application.bot.set_webhook(
-            url=webhook_url,
-            drop_pending_updates=True
-        )
-        
-        # Запуск вебхука
-        await bot_application.run_webhook(
+        application.run_webhook(
             listen="0.0.0.0",
-            port=PORT
+            port=PORT,
+            webhook_url=webhook_url,
+            drop_pending_updates=True
         )
     else:
         # Локальный режим
-        await bot_application.run_polling()
+        application.run_polling()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    run_bot()
